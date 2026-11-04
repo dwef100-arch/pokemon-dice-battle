@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pokémon Elemental Dice Battle</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      display: grid;
+      place-items: center;
+      color: #20243a;
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #f8d64e, #f28c45);
+    }
+
+    main { width: min(100%, 760px); text-align: center; }
+    h1 { margin: 0 0 4px; }
+    .subtitle { margin: 0 0 18px; }
+
+    .arena {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 20px;
+      border-radius: 20px;
+      background: white;
+      box-shadow: 0 12px 32px #6c3e2840;
+      overflow: hidden;
+    }
+
+    .fighter {
+      position: relative;
+      z-index: 1;
+      padding: 14px;
+      border-radius: 16px;
+      background: #f1f3f8;
+      transition: background .2s, box-shadow .2s;
+    }
+
+    .fighter img {
+      width: 150px;
+      height: 150px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .fighter.hit { animation: bonk .45s; }
+
+    @keyframes bonk {
+      0%, 100% { transform: translateX(0) rotate(0); }
+      25% { transform: translateX(-12px) rotate(-8deg); }
+      75% { transform: translateX(12px) rotate(8deg); }
+    }
+
+    .name { margin: 4px 0; font-size: 1.2rem; font-weight: 800; }
+    .types { margin: 0 0 10px; color: #596078; text-transform: capitalize; }
+
+    .hp-track {
+      height: 14px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: #d6d9e3;
+    }
+
+    .hp-fill {
+      height: 100%;
+      width: 100%;
+      background: #35a866;
+      transition: width .4s, background .4s;
+    }
+
+    .hp-text { margin: 6px 0 0; font-size: .9rem; }
+
+    .dice {
+      display: grid;
+      place-items: center;
+      width: 120px;
+      height: 90px;
+      margin: 18px auto 10px;
+      border: 4px solid #4054c5;
+      border-radius: 18px;
+      color: #4054c5;
+      background: white;
+      font-size: 2rem;
+      font-weight: 900;
+      box-shadow: 0 5px 0 #28378f;
+    }
+
+    .dice.rolling { animation: wobble .12s infinite alternate; }
+
+    @keyframes wobble {
+      from { transform: rotate(-8deg) scale(.96); }
+      to { transform: rotate(8deg) scale(1.05); }
+    }
+
+    #message { min-height: 48px; margin: 10px auto; font-weight: 800; }
+
+    .buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 10px;
+      color: white;
+      background: #4054c5;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:hover { filter: brightness(1.1); }
+    button:disabled { opacity: .55; cursor: wait; }
+    #new-game { background: #258344; }
+    #sound-toggle { background: #596078; }
+
+    .log {
+      min-height: 75px;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-top: 16px;
+      padding: 10px;
+      border-radius: 12px;
+      background: #f1f3f8;
+      text-align: left;
+      font-size: .9rem;
+    }
+
+    .log p { margin: 4px 0; }
+    .credit { margin-top: 14px; font-size: .85rem; }
+
+    /* Flying elemental projectiles */
+    .projectile {
+      position: absolute;
+      z-index: 5;
+      left: var(--start-x);
+      top: var(--start-y);
+      pointer-events: none;
+      font-size: 2.5rem;
+      filter: drop-shadow(0 2px 3px #3338);
+      animation: fly .58s cubic-bezier(.2, .8, .3, 1) forwards;
+    }
+
+    @keyframes fly {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(.3) rotate(0);
+      }
+      15% { opacity: 1; }
+      100% {
+        opacity: 1;
+        transform:
+          translate(
+            calc(-50% + var(--move-x)),
+            calc(-50% + var(--move-y))
+          )
+          scale(1.25) rotate(30deg);
+      }
+    }
+
+    .impact-particle {
+      position: absolute;
+      z-index: 6;
+      left: var(--impact-x);
+      top: var(--impact-y);
+      pointer-events: none;
+      font-size: 1.5rem;
+      animation: burst .65s ease-out forwards;
+    }
+
+    @keyframes burst {
+      from {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(.4);
+      }
+      to {
+        opacity: 0;
+        transform:
+          translate(
+            calc(-50% + var(--burst-x)),
+            calc(-50% + var(--burst-y))
+          )
+          scale(1.2) rotate(100deg);
+      }
+    }
+
+    .fighter.glow-fire { box-shadow: 0 0 24px #ff5b24; background: #fff0e8; }
+    .fighter.glow-water { box-shadow: 0 0 24px #2196f3; background: #e8f6ff; }
+    .fighter.glow-electric { box-shadow: 0 0 24px #f4cf00; background: #fffbe0; }
+    .fighter.glow-grass { box-shadow: 0 0 24px #40a84b; background: #eaf8e9; }
+    .fighter.glow-normal { box-shadow: 0 0 24px #8a73c5; background: #f2edff; }
+
+    @media (max-width: 520px) {
+      body { padding: 14px; }
+      .arena { gap: 8px; padding: 10px; }
+      .fighter { padding: 8px; }
+      .fighter img { width: 110px; height: 110px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>Pokémon Elemental Dice Battle!</h1>
+    <p class="subtitle">Roll dice. Launch elements. Bonk responsibly.</p>
+
+    <section class="arena" id="arena" aria-label="Battle">
+      <article class="fighter" id="player-card">
+        <strong>Your Pokémon</strong>
+        <div><img id="player-image" alt="Your Pokémon"></div>
+        <p class="name" id="player-name">Loading…</p>
+        <p class="types" id="player-types"></p>
+        <div class="hp-track"><div class="hp-fill" id="player-bar"></div></div>
+        <p class="hp-text" id="player-hp"></p>
+      </article>
+
+      <article class="fighter" id="enemy-card">
+        <strong>Opponent</strong>
+        <div><img id="enemy-image" alt="Opponent Pokémon"></div>
+        <p class="name" id="enemy-name">Loading…</p>
+        <p class="types" id="enemy-types"></p>
+        <div class="hp-track"><div class="hp-fill" id="enemy-bar"></div></div>
+        <p class="hp-text" id="enemy-hp"></p>
+      </article>
+    </section>
+
+    <div class="dice" id="dice" aria-live="polite">🎲</div>
+    <p id="message" aria-live="polite">Finding Pokémon…</p>
+
+    <div class="buttons">
+      <button id="attack" disabled>Roll to Attack!</button>
+      <button id="new-game">New Battle</button>
+      <button id="sound-toggle" aria-pressed="true">Sound: On</button>
+    </div>
+
+    <div class="log" id="log" aria-live="polite"></div>
+    <p class="credit">Pokémon data and sprites from PokéAPI</p>
+  </main>
+
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const elements = {
+      fire: { emoji: "🔥", sound: 180 },
+      water: { emoji: "💧", sound: 360 },
+      electric: { emoji: "⚡", sound: 520 },
+      grass: { emoji: "🍃", sound: 280 },
+      normal: { emoji: "💥", sound: 220 }
+    };
+
+    let player;
+    let enemy;
+    let battleId = 0;
+    let turnInProgress = false;
+    let gameOver = true;
+    let soundEnabled = true;
+    let audioContext;
+
+    function randomId() {
+      return Math.floor(Math.random() * 151) + 1;
+    }
+
+    async function getPokemon() {
+      const response = await fetch(
+        `https://pokeapi.co/api/v2/pokemon/${randomId()}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`PokéAPI returned HTTP ${response.status}.`);
+      }
+
+      const data = await response.json();
+      const stats = Object.fromEntries(
+        data.stats.map(item => [item.stat.name, item.base_stat])
+      );
+
+      const sprite =
+        data.sprites.front_default ||
+        data.sprites.other?.["official-artwork"]?.front_default;
+
+      if (!sprite) {
+        throw new Error(`No image was found for ${data.name}.`);
+      }
+
+      return {
+        name: data.name,
+        types: data.types.map(item => item.type.name),
+        attack: stats.attack,
+        defense: stats.defense,
+        maxHp: 35 + Math.floor(stats.hp / 2),
+        hp: 0,
+        sprite
+      };
+    }
+
+    function title(name) {
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+
+    function showPokemon(which, pokemon) {
+      $(`#${which}-name`).textContent = title(pokemon.name);
+      $(`#${which}-types`).textContent = pokemon.types.join(" / ");
+
+      const image = $(`#${which}-image`);
+      image.alt = title(pokemon.name);
+      image.src = pokemon.sprite;
+      image.onerror = () => {
+        image.alt = `Image unavailable for ${title(pokemon.name)}`;
+        image.removeAttribute("src");
+      };
+    }
+
+    function updateHealth(which, pokemon) {
+      const percent = Math.max(0, (pokemon.hp / pokemon.maxHp) * 100);
+
+      $(`#${which}-hp`).textContent =
+        `HP: ${pokemon.hp} / ${pokemon.maxHp}`;
+      $(`#${which}-bar`).style.width = `${percent}%`;
+      $(`#${which}-bar`).style.background =
+        percent > 50 ? "#35a866" : percent > 20 ? "#f0a52b" : "#df3f4e";
+    }
+
+    function log(text) {
+      const entry = document.createElement("p");
+      entry.textContent = text;
+      $("#log").prepend(entry);
+    }
+
+    function getElementType(pokemon) {
+      return pokemon.types.find(type => elements[type]) || "normal";
+    }
+
+    function playSound(type, critical = false) {
+      if (!soundEnabled) return;
+
+      try {
+        const AudioContextClass =
+          window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) return;
+
+        audioContext ||= new AudioContextClass();
+
+        if (audioContext.state === "suspended") {
+          audioContext.resume();
+        }
+
+        const now = audioContext.currentTime;
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type =
+          type === "fire" ? "sawtooth" :
+          type === "electric" ? "square" :
+          type === "grass" ? "triangle" : "sine";
+
+        const base = elements[type]?.sound || 220;
+        oscillator.frequency.setValueAtTime(
+          critical ? base * 2 : base,
+          now
+        );
+        oscillator.frequency.exponentialRampToValueAtTime(
+          Math.max(55, base / 2),
+          now + (critical ? 0.42 : 0.28)
+        );
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(
+          critical ? 0.18 : 0.11,
+          now + 0.025
+        );
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.46);
+      } catch (error) {
+        console.warn("Sound could not play:", error);
+      }
+    }
+
+    function animateAttack(attackerKey, defenderKey, type) {
+      const arena = $("#arena");
+      const attackerCard = $(`#${attackerKey}-card`);
+      const defenderCard = $(`#${defenderKey}-card`);
+      const arenaRect = arena.getBoundingClientRect();
+      const from = attackerCard.getBoundingClientRect();
+      const to = defenderCard.getBoundingClientRect();
+
+      const startX = from.left + from.width / 2 - arenaRect.left;
+      const startY = from.top + from.height / 2 - arenaRect.top;
+      const endX = to.left + to.width / 2 - arenaRect.left;
+      const endY = to.top + to.height / 2 - arenaRect.top;
+
+      const projectile = document.createElement("span");
+      projectile.className = "projectile";
+      projectile.textContent = elements[type].emoji;
+      projectile.style.setProperty("--start-x", `${startX}px`);
+      projectile.style.setProperty("--start-y", `${startY}px`);
+      projectile.style.setProperty("--move-x", `${endX - startX}px`);
+      projectile.style.setProperty("--move-y", `${endY - startY}px`);
+      arena.append(projectile);
+
+      window.setTimeout(() => projectile.remove(), 750);
+
+      defenderCard.classList.remove("hit");
+      void defenderCard.offsetWidth;
+      defenderCard.classList.add("hit", `glow-${type}`);
+
+      window.setTimeout(() => {
+        defenderCard.classList.remove("glow-fire", "glow-water", "glow-electric", "glow-grass", "glow-normal");
+      }, 650);
+
+      for (let i = 0; i < 7; i++) {
+        const particle = document.createElement("span");
+        particle.className = "impact-particle";
+        particle.textContent = elements[type].emoji;
+        particle.style.setProperty("--impact-x", `${endX}px`);
+        particle.style.setProperty("--impact-y", `${endY}px`);
+        particle.style.setProperty("--burst-x", `${Math.random() * 150 - 75}px`);
+        particle.style.setProperty("--burst-y", `${Math.random() * 130 - 65}px`);
+        arena.append(particle);
+        window.setTimeout(() => particle.remove(), 700);
+      }
+    }
+
+    async function newBattle() {
+      const thisBattle = ++battleId;
+      turnInProgress = false;
+      gameOver = true;
+
+      $("#attack").disabled = true;
+      $("#message").textContent = "Finding Pokémon… cue dramatic music!";
+      $("#log").replaceChildren();
+      $("#player-name").textContent = "Loading…";
+      $("#enemy-name").textContent = "Loading…";
+      $("#player-types").textContent = "";
+      $("#enemy-types").textContent = "";
+      $("#player-hp").textContent = "";
+      $("#enemy-hp").textContent = "";
+      $("#player-image").removeAttribute("src");
+      $("#enemy-image").removeAttribute("src");
+      $("#dice").textContent = "🎲";
+      $("#dice").classList.remove("rolling");
+
+      try {
+        const firstPokemon = await getPokemon();
+        if (thisBattle !== battleId) return;
+
+        let secondPokemon = await getPokemon();
+        if (thisBattle !== battleId) return;
+
+        for (
+          let tries = 0;
+          secondPokemon.name === firstPokemon.name && tries < 5;
+          tries++
+        ) {
+          secondPokemon = await getPokemon();
+          if (thisBattle !== battleId) return;
+        }
+
+        player = firstPokemon;
+        enemy = secondPokemon;
+        player.hp = player.maxHp;
+        enemy.hp = enemy.maxHp;
+
+        showPokemon("player", player);
+        showPokemon("enemy", enemy);
+        updateHealth("player", player);
+        updateHealth("enemy", enemy);
+
+        gameOver = false;
+        $("#message").textContent = "Your turn! Roll to bonk!";
+        $("#attack").disabled = false;
+
+        log(`${title(player.name)} vs. ${title(enemy.name)}! The crowd is mostly confused.`);
+      } catch (error) {
+        if (thisBattle !== battleId) return;
+
+        $("#message").textContent =
+          "Couldn't load the Pokémon. Check your internet connection.";
+        log(`Error: ${error.message}`);
+        console.error("Could not start battle:", error);
+      }
+    }
+
+    async function rollDie(thisBattle) {
+      const die = $("#dice");
+      die.classList.add("rolling");
+
+      for (let i = 0; i < 10; i++) {
+        if (thisBattle !== battleId) return null;
+        die.textContent = `🎲 ${Math.floor(Math.random() * 6) + 1}`;
+        await sleep(75);
+      }
+
+      if (thisBattle !== battleId) return null;
+
+      const result = Math.floor(Math.random() * 6) + 1;
+      die.textContent = `🎲 ${result}`;
+      die.classList.remove("rolling");
+      return result;
+    }
+
+    function damageFor(attacker, defender, roll) {
+      let damage = Math.max(
+        1,
+        5 + Math.floor(attacker.attack / 25) + roll * 2 -
+          Math.floor(defender.defense / 35)
+      );
+
+      if (roll === 6) damage = Math.floor(damage * 1.5);
+      return damage;
+    }
+
+    function takeTurn(attacker, defender, attackerKey, defenderKey, roll) {
+      if (roll === 1) {
+        playSound("normal");
+
+        const jokes = [
+          `${title(attacker.name)} missed! The air is now very scared.`,
+          "Critical miss! The Pokémon attacked its own dignity.",
+          "A dramatic swing… at absolutely nothing."
+        ];
+
+        $("#message").textContent =
+          jokes[Math.floor(Math.random() * jokes.length)];
+        log($("#message").textContent);
+        return;
+      }
+
+      const type = getElementType(attacker);
+      const damage = damageFor(attacker, defender, roll);
+      defender.hp = Math.max(0, defender.hp - damage);
+      updateHealth(defenderKey, defender);
+      animateAttack(attackerKey, defenderKey, type);
+      playSound(type, roll === 6);
+
+      const typeName = type === "electric" ? "Thunder" : title(type);
+
+      $("#message").textContent = roll === 6
+        ? `CRITICAL ${typeName.toUpperCase()} BONK! ${damage} damage! Snacks have been dropped!`
+        : `${title(attacker.name)} used ${typeName} Bonk for ${damage} damage!`;
+
+      log($("#message").textContent);
+    }
+
+    $("#attack").addEventListener("click", async () => {
+      if (turnInProgress || gameOver) return;
+
+      turnInProgress = true;
+      const thisBattle = battleId;
+      $("#attack").disabled = true;
+
+      let roll = await rollDie(thisBattle);
+      if (roll === null || thisBattle !== battleId) return;
+
+      takeTurn(player, enemy, "player", "enemy", roll);
+
+      if (enemy.hp <= 0) {
+        gameOver = true;
+        $("#message").textContent =
+          `${title(enemy.name)} fainted! You win an imaginary trophy!`;
+        log($("#message").textContent);
+        turnInProgress = false;
+        return;
+      }
+
+      await sleep(750);
+      if (thisBattle !== battleId) return;
+
+      $("#message").textContent = `${title(enemy.name)} is plotting something…`;
+      roll = await rollDie(thisBattle);
+      if (roll === null || thisBattle !== battleId) return;
+
+      takeTurn(enemy, player, "enemy", "player", roll);
+
+      if (player.hp <= 0) {
+        gameOver = true;
+        $("#message").textContent =
+          `${title(player.name)} fainted. It requests a sandwich.`;
+        log($("#message").textContent);
+      } else {
+        $("#attack").disabled = false;
+        $("#message").textContent += " Your turn!";
+      }
+
+      turnInProgress = false;
+    });
+
+    $("#new-game").addEventListener("click", newBattle);
+
+    $("#sound-toggle").addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      $("#sound-toggle").textContent = soundEnabled ? "Sound: On" : "Sound: Off";
+      $("#sound-toggle").setAttribute("aria-pressed", String(soundEnabled));
+
+      if (soundEnabled) {
+        // Initialize/resume audio after this user click.
+        playSound("electric");
+      }
+    });
+
+    newBattle();
+  </script>
+</body>
+</html>
